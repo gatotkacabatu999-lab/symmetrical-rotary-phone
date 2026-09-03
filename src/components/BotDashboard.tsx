@@ -19,6 +19,20 @@ type BotStatePayload = {
 
 const QR_REFRESH_SECONDS = 20
 
+function normalizePhoneInput(value: string): string {
+  return value.replace(/[^\d+\s()-]/g, '')
+}
+
+function validatePhoneNumber(value: string): string | null {
+  const raw = value.trim()
+  const digits = raw.replace(/\D/g, '')
+  if (!digits) return 'Sila masukkan nombor WhatsApp.'
+  if (raw.startsWith('+')) return 'Buang simbol +. Contoh yang betul: 60123456789.'
+  if (digits.startsWith('0')) return 'Gunakan kod negara tanpa 0 di hadapan. Contoh: 60123456789.'
+  if (digits.length < 8 || digits.length > 15) return 'Nombor mesti 8 hingga 15 digit termasuk kod negara.'
+  return null
+}
+
 const STATUS_LABEL: Record<BotStatus, string> = {
   disabled: 'Disabled',
   starting: 'Starting',
@@ -126,12 +140,16 @@ export function BotDashboard() {
   const isPairingInProgress = state?.status === 'starting' || state?.status === 'qr' || state?.status === 'pairing-phone' || state?.status === 'pairing-code' || state?.status === 'reconnecting'
   const activePairingMethod = state?.pairingMethod ?? pairingMethod
   const isAlternatePairingMethod = (method: 'qr' | 'phone') => isConnected && activePairingMethod !== method
-  const isPairingRequestLocked = applyingPairing || isPairingInProgress || isConnected
+  const isSelectedMethodAlreadyRunning = isPairingInProgress && activePairingMethod === pairingMethod
+  const isPairingRequestLocked = applyingPairing || isSelectedMethodAlreadyRunning || isConnected
 
   const applyPairingSelection = useCallback(async () => {
-    if (pairingMethod === 'phone' && !phoneNumber.trim()) {
-      setPairingMessage('Sila masukkan nombor telefon sebelum teruskan.')
-      return
+    if (pairingMethod === 'phone') {
+      const validationError = validatePhoneNumber(phoneNumber)
+      if (validationError) {
+        setPairingMessage(validationError)
+        return
+      }
     }
 
     try {
@@ -160,7 +178,10 @@ export function BotDashboard() {
         throw new Error(payload?.error || 'Gagal apply pilihan pairing')
       }
 
-      setPairingMessage(pairingMethod === 'phone' ? 'Kaedah phone number disimpan.' : 'Kaedah QR disimpan.')
+      if (payload?.data) {
+        setState(payload.data as BotStatePayload)
+      }
+      setPairingMessage(pairingMethod === 'phone' ? 'Pairing code berjaya dijana.' : 'QR sedang dijana.')
       await fetchStatus()
     } catch (err) {
       setPairingMessage(err instanceof Error ? err.message : 'Gagal apply pilihan pairing')
@@ -284,12 +305,15 @@ export function BotDashboard() {
                 <label htmlFor="pairingPhone" className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Phone Number</label>
                 <Input
                   id="pairingPhone"
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel"
                   value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  onChange={(e) => setPhoneNumber(normalizePhoneInput(e.target.value))}
                   placeholder="60123456789"
                   className="h-10 rounded-xl border-0 bg-background/80 text-[12px] shadow-inner"
                 />
-                <p className="text-[10px] text-muted-foreground">Enter your WhatsApp number with country code, no + or spaces.</p>
+                <p className="text-[10px] text-muted-foreground">Masukkan kod negara dan nombor tanpa +, ruang, atau 0 di hadapan. Contoh Malaysia: 60123456789.</p>
               </div>
 
               <Button
@@ -310,7 +334,7 @@ export function BotDashboard() {
                   <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Your pairing code</p>
                   <p className="mt-2 text-2xl font-bold tracking-[0.12em] text-foreground">{state.pairingCode}</p>
                   <p className="mt-2 text-[10px] text-muted-foreground">
-                    Open WhatsApp on your phone → Linked Devices → Link with phone number, then enter this code.
+                    Buka WhatsApp → Settings → Linked Devices → Link a device → Link with phone number, kemudian masukkan kod ini.
                   </p>
                 </div>
               ) : null}

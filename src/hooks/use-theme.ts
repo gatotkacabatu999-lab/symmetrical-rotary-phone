@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react"
-import { useTheme as useNextTheme } from "next-themes"
 
 export type ThemeMode = "light" | "dark" | "system"
 export type ResolvedColorMode = "light" | "dark"
@@ -104,7 +103,26 @@ function loadGoogleFont(googleId: string) {
 }
 
 export function useTheme() {
-  const { theme: activeTheme, setTheme: setNextTheme, resolvedTheme } = useNextTheme()
+  const [activeTheme, setActiveThemeState] = useState<string>(() => {
+    try { return localStorage.getItem("colorMode") ?? "system" } catch { return "system" }
+  })
+  const [resolvedTheme, setResolvedTheme] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem("colorMode")
+      if (stored === "dark") return "dark"
+      if (stored === "light") return "light"
+      return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+    } catch { return "light" }
+  })
+  const setNextTheme = (next: string) => {
+    setActiveThemeState(next)
+    const resolved = next === "system"
+      ? (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+      : next
+    setResolvedTheme(resolved)
+    document.documentElement.classList.toggle("dark", resolved === "dark")
+    try { localStorage.setItem("colorMode", next) } catch {}
+  }
   const [appFont, setAppFont] = useState<AppFont>(() => getStoredOrDefaultFont())
   const [appZoom, setAppZoom] = useState<AppZoom>(() => getStoredOrDefaultZoom())
   const [textSize, setTextSize] = useState<TextSize>(() => getStoredOrDefaultTextSize())

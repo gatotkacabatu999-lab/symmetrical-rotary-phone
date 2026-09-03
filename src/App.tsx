@@ -1,4 +1,6 @@
-import { useState, useEffect, lazy, Suspense, Component, type ErrorInfo, type ReactNode } from "react"
+import { useState, useEffect, useCallback, lazy, Suspense, Component, type ErrorInfo, type ReactNode } from "react"
+import { fetchAuthStatus } from "@/lib/auth"
+import { LoginScreen } from "@/components/LoginScreen"
 import { createPortal } from "react-dom"
 import { AppSidebar } from "@/components/app-sidebar"
 import { addToRecent } from "@/components/NavRecent"
@@ -2227,16 +2229,32 @@ export function App() {
   const [showContent, setShowContent] = useState(false)
   const [isSharedView] = useState(getInitialSharedView)
 
+  // ── Auth state ─────────────────────────────────────────────────────────────
+  const [authChecked, setAuthChecked] = useState(false)
+  const [authenticated, setAuthenticated] = useState(false)
+
+  useEffect(() => {
+    fetchAuthStatus().then(({ authenticated: a, authEnabled }) => {
+      setAuthenticated(!authEnabled || a)
+      setAuthChecked(true)
+    })
+  }, [])
+
+  const handleLoginSuccess = useCallback(() => setAuthenticated(true), [])
+
   useEffect(() => {
     if (!landed) return
     const timer = setTimeout(() => setShowContent(true), 50)
     return () => clearTimeout(timer)
   }, [landed])
 
+  if (!authChecked) return null // brief flash prevention
+
   return (
     <DeviceProvider>
       <ErrorBoundary>
-        {!landed && <LoadingIntro onEnter={() => setLanded(true)} />}
+        {!authenticated && <LoginScreen onSuccess={handleLoginSuccess} />}
+        {authenticated && !landed && <LoadingIntro onEnter={() => setLanded(true)} />}
         {landed && (
           <div className={`h-dvh w-full overflow-hidden transition-opacity duration-600 ease-out ${showContent ? "opacity-100" : "opacity-0"}`}>
             <SidebarProvider

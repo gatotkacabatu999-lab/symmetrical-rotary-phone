@@ -64,6 +64,19 @@ const botState: BotRuntimeState = {
 };
 
 const dashboardToken = process.env.BOT_DASHBOARD_TOKEN || '';
+const DEFAULT_ACCESS_PASSWORD = 'Acun97';
+const AUTH_COOKIE_NAME = 'dashboard_session';
+
+function getRequestCookie(req: any, name: string): string {
+  const raw = typeof req?.headers?.cookie === 'string' ? req.headers.cookie : '';
+  const match = raw.split(';').map((entry: string) => entry.trim()).find((entry: string) => entry.startsWith(`${name}=`));
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : '';
+}
+
+function getConfiguredAccessPassword(): string {
+  const stored = process.env.APP_ACCESS_PASSWORD || process.env.ACCESS_PASSWORD || DEFAULT_ACCESS_PASSWORD;
+  return stored && stored.trim() ? stored.trim() : DEFAULT_ACCESS_PASSWORD;
+}
 
 function isDashboardAuthorized(req: any): boolean {
   if (!dashboardToken) return true;
@@ -84,6 +97,28 @@ app.all('/api/upload', express.raw({ type: '*/*', limit: '15mb' }));
 // JSON payload endpoints.
 app.use('/api', express.json({ limit: '10mb' }));
 app.use('/api', express.urlencoded({ extended: true }));
+
+app.get('/api/auth/status', (req: any, res: any) => {
+  const isAuthenticated = getRequestCookie(req, AUTH_COOKIE_NAME) === 'authenticated';
+  res.json({ authenticated: isAuthenticated, authEnabled: true });
+});
+
+app.post('/api/auth/login', (req: any, res: any) => {
+  const password = typeof req.body?.password === 'string' ? req.body.password.trim() : '';
+  const expectedPassword = getConfiguredAccessPassword();
+
+  if (password === expectedPassword) {
+    res.setHeader('Set-Cookie', `${AUTH_COOKIE_NAME}=authenticated; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}`);
+    return res.json({ ok: true, message: 'Login successful' });
+  }
+
+  return res.status(401).json({ ok: false, error: 'Invalid password' });
+});
+
+app.post('/api/auth/logout', (_req: any, res: any) => {
+  res.setHeader('Set-Cookie', `${AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+  return res.json({ ok: true });
+});
 
 app.get('/health', (_req: any, res: any) => {
   res.status(200).json({ ok: true });

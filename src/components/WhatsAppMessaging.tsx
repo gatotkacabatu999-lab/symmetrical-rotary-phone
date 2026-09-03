@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { CalendarClock, ContactRound, FileAudio, FileText, Image, LoaderCircle, MessageCircleMore, Pencil, Plus, Search, Send, Smartphone, Trash2, Upload, UserRound } from "lucide-react"
+import { CalendarClock, ContactRound, Download, FileText, Image, LoaderCircle, MessageCircleMore, Mic, Music2, Pencil, Plus, Search, Send, Smartphone, Trash2, Upload, UserRound, Video } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -276,17 +276,46 @@ function SendChat() {
 }
 
 type DeletedMessage = {
+  eventId: string
   id: string
   chatJid: string
+  chatName: string
+  chatType: 'personal' | 'group' | 'status'
   senderJid: string
+  senderName: string
   fromMe: boolean
   timestamp: string
+  changedAt: string
   deletedAt: string
+  eventType: 'deleted' | 'edited' | 'status'
   text: string
+  originalText: string
+  currentText: string | null
   mediaType: string | null
   fileName: string | null
   mimetype: string | null
   mediaPath: string | null
+  contentType?: string | null
+  isVoiceNote?: boolean
+  isGif?: boolean
+  details?: {
+    location?: {
+      latitude: number
+      longitude: number
+      name?: string
+      address?: string
+    }
+    contact?: {
+      displayName: string
+    }
+    poll?: {
+      name: string
+      options: string[]
+    }
+    reaction?: {
+      text: string
+    }
+  } | null
   contentRecovered?: boolean
   contentSource?: 'captured' | 'fallback'
 }
@@ -298,9 +327,10 @@ function getDeletedMediaPreviewUrl(message: DeletedMessage, token: string) {
 
 function getDeletedMediaLabel(message: DeletedMessage) {
   if (!message.mediaType && !message.fileName) return 'Fail media'
-  if (message.mediaType === 'audio') return message.fileName ? message.fileName : 'Voice note'
+  if (message.mediaType === 'audio') return message.isVoiceNote ? 'Voice note' : message.fileName ? message.fileName : 'Audio'
   if (message.mediaType === 'image') return message.fileName ? message.fileName : 'Image'
-  if (message.mediaType === 'video') return message.fileName ? message.fileName : 'Video'
+  if (message.mediaType === 'video') return message.isGif ? 'GIF' : message.fileName ? message.fileName : 'Video'
+  if (message.mediaType === 'sticker') return 'Sticker'
   return message.fileName ? message.fileName : 'Document'
 }
 
@@ -319,14 +349,19 @@ function renderDeletedMedia(message: DeletedMessage, url: string | null) {
   }
 
   if (message.mediaType === 'video') {
-    return <video controls src={url} className="mt-3 max-h-80 rounded-md border" />
+    return (
+      <div className="mt-3 overflow-hidden rounded-xl border bg-black/5">
+        <video controls autoPlay={message.isGif} loop={message.isGif} muted={message.isGif} playsInline src={url} className="max-h-80 w-full object-contain" />
+        {message.isGif ? <p className="flex items-center gap-1.5 border-t px-3 py-2 text-[11px] text-muted-foreground"><Video className="size-3.5" /> GIF</p> : null}
+      </div>
+    )
   }
 
   if (message.mediaType === 'audio') {
     return (
       <div className="mt-3 space-y-2 rounded-md border border-border/60 bg-background/60 p-3">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <FileAudio className="size-4 text-primary" />
+          {message.isVoiceNote ? <Mic className="size-4 text-primary" /> : <Music2 className="size-4 text-primary" />}
           <span>{getDeletedMediaLabel(message)}</span>
         </div>
         <audio controls src={url} className="w-full" />
@@ -338,28 +373,15 @@ function renderDeletedMedia(message: DeletedMessage, url: string | null) {
   const mimeType = (message.mimetype || '').toLowerCase()
   const isPdf = mimeType.includes('pdf') || fileName.endsWith('.pdf')
   const isTextLike = mimeType.startsWith('text/') || ['.txt', '.md', '.csv', '.json'].some((ext) => fileName.endsWith(ext))
-
-  if (isPdf || isTextLike || mimeType.includes('json') || mimeType.includes('xml')) {
-    return (
-      <div className="mt-3 space-y-2 rounded-md border border-border/60 bg-background/60 p-3">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <FileText className="size-4 text-primary" />
-          <span>{getDeletedMediaLabel(message)}</span>
-        </div>
-        <iframe title={getDeletedMediaLabel(message)} src={url} className="h-72 w-full rounded-md border bg-white" />
-      </div>
-    )
-  }
-
   return (
     <div className="mt-3 space-y-2 rounded-md border border-border/60 bg-background/60 p-3">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <FileText className="size-4 text-primary" />
-        <span>{getDeletedMediaLabel(message)}</span>
+        <span>{getDeletedMediaLabel(message)}{isPdf ? ' · PDF' : isTextLike ? ' · Text' : ''}</span>
       </div>
-      <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
-        <FileText className="size-4" />
-        Buka fail
+      <a href={url} download={message.fileName || 'whatsapp-media'} className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
+        <Download className="size-4" />
+        Muat turun fail
       </a>
     </div>
   )
@@ -370,16 +392,19 @@ function DeletedMessages() {
   const [messages, setMessages] = useState<DeletedMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [botStatus, setBotStatus] = useState<string>('unknown')
+  const [filter, setFilter] = useState<'deleted' | 'edited' | 'status'>('deleted')
   const [actioning, setActioning] = useState<string | null>(null)
   const [selectedChat, setSelectedChat] = useState<{ chatJid: string; title: string; messages: DeletedMessage[] } | null>(null)
 
-  const loadMessages = useCallback(async () => {
+  const loadMessages = useCallback(async (showLoader = false) => {
     try {
-      setLoading(true)
+      if (showLoader) setLoading(true)
       const response = await fetch(token ? `/api/bot/deleted-messages?token=${encodeURIComponent(token)}` : '/api/bot/deleted-messages', { headers: token ? { 'x-bot-dashboard-token': token } : undefined })
       const payload = await response.json()
       if (!response.ok || !payload?.success) throw new Error(payload?.error || 'Gagal ambil rekod mesej')
-      setMessages(payload.data)
+      setMessages(Array.isArray(payload.data) ? payload.data : [])
+      setBotStatus(payload?.bot?.status || 'unknown')
       setError(null)
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Gagal ambil rekod mesej')
@@ -430,12 +455,20 @@ function DeletedMessages() {
     }
   }, [token])
 
-  useEffect(() => { void loadMessages() }, [loadMessages])
+  useEffect(() => {
+    void loadMessages(true)
+    const timer = window.setInterval(() => { void loadMessages(false) }, 3000)
+    return () => window.clearInterval(timer)
+  }, [loadMessages])
 
   const mediaUrl = (message: DeletedMessage) => getDeletedMediaPreviewUrl(message, token)
+  const filteredMessages = useMemo(
+    () => messages.filter((message) => message.eventType === filter),
+    [filter, messages],
+  )
   const groupedMessages = useMemo(() => {
     const grouped = new Map<string, DeletedMessage[]>()
-    for (const message of messages) {
+    for (const message of filteredMessages) {
       const key = message.chatJid || 'unknown'
       const list = grouped.get(key) ?? []
       list.push(message)
@@ -444,17 +477,14 @@ function DeletedMessages() {
 
     return Array.from(grouped.entries())
       .map(([chatJid, chatMessages]) => {
-        const sorted = [...chatMessages].sort((a, b) => new Date(a.deletedAt).getTime() - new Date(b.deletedAt).getTime())
+        const sorted = [...chatMessages].sort((a, b) => new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime())
         const newest = sorted[sorted.length - 1]
-        const otherPartyMessage = chatMessages.find((message) => !message.fromMe && message.senderJid && !message.senderJid.endsWith('@g.us'))
-        const title = otherPartyMessage?.senderJid
-          || (chatJid.endsWith('@g.us') ? (chatMessages.find((message) => message.senderJid && !message.senderJid.endsWith('@g.us'))?.senderJid || chatJid) : (chatMessages[0]?.senderJid || chatJid))
-        const displayName = title === chatJid ? chatJid : title
-        const previewText = newest?.text || (newest?.mediaType ? `[${newest.mediaType}]` : '[No content]')
-        return { chatJid, title: displayName, previewText, messages: sorted }
+        const title = newest?.chatName || newest?.senderName || chatJid
+        const previewText = newest?.currentText || newest?.originalText || (newest?.mediaType ? `[${newest.mediaType}]` : '[Kandungan tidak sempat ditangkap]')
+        return { chatJid, title, previewText, messages: sorted }
       })
-      .sort((a, b) => new Date(b.messages[b.messages.length - 1].deletedAt).getTime() - new Date(a.messages[a.messages.length - 1].deletedAt).getTime())
-  }, [messages])
+      .sort((a, b) => new Date(b.messages[b.messages.length - 1].changedAt).getTime() - new Date(a.messages[a.messages.length - 1].changedAt).getTime())
+  }, [filteredMessages])
 
   const openChat = (chatJid: string) => {
     const chat = groupedMessages.find((entry) => entry.chatJid === chatJid)
@@ -468,19 +498,47 @@ function DeletedMessages() {
     return parts.map((part) => part[0]?.toUpperCase() ?? '').join('') || '?'
   }
 
-  if (loading) return <div className="rounded-lg border border-border/70 bg-card p-5 text-sm text-muted-foreground">Memuatkan rekod...</div>
-  if (error) return <div className="rounded-lg border border-destructive/40 bg-card p-5 text-sm text-destructive">{error}</div>
-  if (!messages.length) return <div className="rounded-lg border border-border/70 bg-card p-5 text-sm text-muted-foreground">Tiada mesej yang dipadam untuk dilihat semula buat masa ini.</div>
-
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      {botStatus !== 'connected' ? (
+        <div className="rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-200">
+          Bot belum disambungkan. Buka halaman Account dan lengkapkan QR atau pairing code. Hanya mesej yang diterima selepas bot tersambung boleh dipulihkan.
+        </div>
+      ) : (
+        <div className="rounded-xl border border-emerald-300/60 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-700/60 dark:bg-emerald-950/30 dark:text-emerald-200">
+          Bot tersambung dan sedang menangkap mesej baharu untuk personal, group, dan Status.
+        </div>
+      )}
+
+      <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="inline-flex rounded-lg bg-muted p-1">
+          {([
+            ['deleted', 'Dipadam'],
+            ['edited', 'Diedit'],
+            ['status', 'Status'],
+          ] as const).map(([value, label]) => {
+            const count = messages.filter((message) => message.eventType === value).length
+            return (
+              <button key={value} type="button" onClick={() => { setFilter(value); setSelectedChat(null) }} className={`rounded-md px-3 py-1.5 text-xs font-medium ${filter === value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}>
+                {label} ({count})
+              </button>
+            )
+          })}
+        </div>
         <Button type="button" variant="destructive" size="sm" onClick={() => void clearAllMessages()} disabled={actioning !== null}>
           {actioning === 'all' ? 'Memadam...' : 'Padam semua rekod'}
         </Button>
       </div>
 
-      <div className="space-y-3">
+      {loading ? <div className="rounded-lg border border-border/70 bg-card p-5 text-sm text-muted-foreground">Memuatkan rekod...</div> : null}
+      {error ? <div className="rounded-lg border border-destructive/40 bg-card p-5 text-sm text-destructive">{error}</div> : null}
+      {!loading && !error && !filteredMessages.length ? (
+        <div className="rounded-lg border border-border/70 bg-card p-5 text-sm text-muted-foreground">
+          Tiada rekod {filter === 'deleted' ? 'mesej dipadam' : filter === 'edited' ? 'mesej diedit' : 'Status'} buat masa ini.
+        </div>
+      ) : null}
+
+      {!loading && !error && filteredMessages.length ? <div className="space-y-3">
         {groupedMessages.map(({ chatJid, title, previewText, messages: chatMessages }) => (
           <article key={chatJid} className="rounded-xl border border-border/70 bg-card p-3 shadow-sm transition-colors hover:bg-accent/20">
             <div className="flex items-center justify-between gap-3">
@@ -490,7 +548,7 @@ function DeletedMessages() {
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-foreground">{title}</p>
-                  <p className="text-[11px] text-muted-foreground">{chatMessages.length} rekod mesej</p>
+                  <p className="text-[11px] text-muted-foreground">{chatMessages.length} rekod · {chatMessages[0]?.chatType}</p>
                 </div>
               </div>
 
@@ -509,15 +567,15 @@ function DeletedMessages() {
             </p>
           </article>
         ))}
-      </div>
+      </div> : null}
 
       <Dialog open={Boolean(selectedChat)} onOpenChange={(open) => { if (!open) setSelectedChat(null) }}>
         <DialogContent className="max-w-3xl p-0">
           <div className="rounded-2xl border border-border bg-card">
             <div className="flex items-center justify-between border-b px-4 py-3">
               <div>
-                <p className="text-sm font-semibold">{selectedChat?.title ?? 'Deleted conversation'}</p>
-                <p className="text-[11px] text-muted-foreground">Mesej yang dipadam untuk perbualan ini boleh dilihat semula</p>
+                <p className="text-sm font-semibold">{selectedChat?.title ?? 'Rekod WhatsApp'}</p>
+                <p className="text-[11px] text-muted-foreground">Kandungan yang sempat ditangkap sebelum perubahan</p>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={() => setSelectedChat(null)}>Tutup</Button>
             </div>
@@ -527,20 +585,26 @@ function DeletedMessages() {
                 const url = mediaUrl(message)
                 const isOwn = message.fromMe
 
-                return (
-                  <div key={`${message.chatJid}-${message.id}`} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                  return (
+                    <div key={message.eventId || `${message.chatJid}-${message.id}`} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[85%] rounded-2xl border p-3 shadow-sm ${isOwn ? 'border-primary/20 bg-primary/10 text-primary-foreground' : 'border-border bg-background text-foreground'}`}>
                       <div className="mb-2 flex items-center justify-between gap-3 text-[10px] text-muted-foreground">
-                        <span>{message.senderJid || 'Pengirim tidak dikenali'} {isOwn ? '(bot)' : ''}</span>
+                        <span>{message.senderName || message.senderJid || 'Pengirim tidak dikenali'} {isOwn ? '(akaun sendiri)' : ''}</span>
                         <div className="flex items-center gap-2">
-                          <span>{formatDate(message.deletedAt)}</span>
+                          <span>{formatDate(message.changedAt)}</span>
+                          <span className="rounded-full bg-muted px-2 py-0.5">{message.eventType === 'deleted' ? 'Dipadam' : message.eventType === 'edited' ? 'Diedit' : 'Status'}</span>
                           <span className={`inline-flex rounded-full px-2 py-0.5 font-medium ${message.contentRecovered ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
                             {message.contentRecovered ? 'Recovered' : 'Fallback'}
                           </span>
                         </div>
                       </div>
 
-                      {message.text ? <p className="whitespace-pre-wrap text-sm">{message.text}</p> : null}
+                      {message.eventType === 'edited' ? (
+                        <div className="space-y-2">
+                          <div><p className="text-[10px] font-semibold uppercase text-muted-foreground">Asal</p><p className="whitespace-pre-wrap text-sm">{message.originalText || '[Tidak sempat ditangkap]'}</p></div>
+                          <div className="border-t pt-2"><p className="text-[10px] font-semibold uppercase text-muted-foreground">Terkini</p><p className="whitespace-pre-wrap text-sm">{message.currentText || '[Kosong]'}</p></div>
+                        </div>
+                      ) : message.originalText ? <p className="whitespace-pre-wrap text-sm">{message.originalText}</p> : <p className="text-sm italic text-muted-foreground">Kandungan asal tidak sempat ditangkap.</p>}
                       {renderDeletedMedia(message, url)}
                     </div>
                   </div>

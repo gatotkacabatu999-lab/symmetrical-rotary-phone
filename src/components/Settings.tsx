@@ -15,6 +15,7 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/comp
 import { useTheme, FONT_OPTIONS, type AppFont } from "@/hooks/use-theme"
 import { useEditMode } from "@/contexts/EditModeContext"
 import { DEFAULT_ROUTE_COLORS } from "@/lib/route-colors"
+import { setAccessPassword, isPasswordValid } from "@/lib/auth"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type SectionId =
@@ -272,8 +273,31 @@ export function Settings({ section = "profile" }: { section?: SectionId }) {
   }, [isEditMode, settingsDirty, setHasUnsavedChanges])
 
   const handleChangePassword = () => {
-    if (security.newPassword !== security.confirmPassword) { alert("New passwords do not match!"); return }
-    if (security.newPassword.length < 8) { alert("Password must be at least 8 characters!"); return }
+    const current = security.currentPassword.trim()
+    const next = security.newPassword.trim()
+    const confirm = security.confirmPassword.trim()
+
+    if (!current || !next || !confirm) {
+      alert("Please complete all password fields.")
+      return
+    }
+
+    if (!isPasswordValid(current)) {
+      alert("Current password is incorrect.")
+      return
+    }
+
+    if (next.length < 8) {
+      alert("Password must be at least 8 characters!")
+      return
+    }
+
+    if (next !== confirm) {
+      alert("New passwords do not match!")
+      return
+    }
+
+    setAccessPassword(next)
     alert("Password changed successfully!")
     setSecurity({ currentPassword: "", newPassword: "", confirmPassword: "" })
   }
