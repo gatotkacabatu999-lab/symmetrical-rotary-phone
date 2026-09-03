@@ -29,22 +29,22 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         disabled={disabled}
         onClick={() => onCheckedChange?.(!checked)}
         className={cn(
-          "relative inline-flex shrink-0 items-center rounded-full border p-0.5 transition-all duration-200 ease-in-out",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+          "relative inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent",
+          "transition-colors duration-200 ease-in-out",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
           "disabled:cursor-not-allowed disabled:opacity-50",
-          checked
-            ? "border-emerald-500 bg-emerald-500 shadow-[0_6px_16px_rgba(16,185,129,0.28)]"
-            : "border-slate-300 bg-slate-300 shadow-inner dark:border-slate-600 dark:bg-slate-700",
-          isSmall ? "h-5 w-9" : "h-7 w-12",
+          checked ? "bg-primary" : "bg-input",
+          isSmall ? "h-4 w-7" : "h-6 w-11",
           className,
         )}
       >
         <span
           className={cn(
-            "pointer-events-none block rounded-full border border-slate-200 bg-white shadow-[0_2px_8px_rgba(15,23,42,0.18)] transition-all duration-200 ease-in-out",
-            "dark:border-slate-300/80 dark:bg-slate-50",
-            isSmall ? "h-3.5 w-3.5" : "h-5.5 w-5.5",
-            checked ? (isSmall ? "translate-x-4" : "translate-x-5") : "translate-x-0",
+            "pointer-events-none block rounded-full bg-background shadow-lg ring-0 transition-transform duration-200 ease-in-out",
+            isSmall ? "h-3 w-3" : "h-5 w-5",
+            isSmall
+              ? checked ? "translate-x-3" : "translate-x-0"
+              : checked ? "translate-x-5" : "translate-x-0",
           )}
         />
       </button>

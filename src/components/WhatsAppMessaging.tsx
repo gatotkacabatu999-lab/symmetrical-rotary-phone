@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { CalendarClock, ContactRound, Download, FileText, Image, LoaderCircle, MessageCircleMore, Mic, Music2, Pencil, Plus, Search, Send, Smartphone, Trash2, Upload, UserRound, Video } from "lucide-react"
+import { CalendarClock, ContactRound, FileAudio, FileText, Image, ListChecks, LoaderCircle, MapPin, MessageCircleMore, Mic, Music2, Pencil, Phone, Plus, Search, Send, Smartphone, Smile, Trash2, Upload, UserRound, Video, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -332,6 +332,104 @@ function getDeletedMediaLabel(message: DeletedMessage) {
   if (message.mediaType === 'video') return message.isGif ? 'GIF' : message.fileName ? message.fileName : 'Video'
   if (message.mediaType === 'sticker') return 'Sticker'
   return message.fileName ? message.fileName : 'Document'
+}
+
+function getDeletedContentLabel(message: DeletedMessage) {
+  if (message.mediaType === 'image') return 'Imej'
+  if (message.mediaType === 'video') return message.isGif ? 'GIF' : 'Video'
+  if (message.mediaType === 'audio') return message.isVoiceNote ? 'Voice note' : 'Audio'
+  if (message.mediaType === 'document') return 'Fail'
+  if (message.mediaType === 'sticker') return 'Sticker'
+
+  switch (message.contentType) {
+    case 'locationMessage':
+      return 'Lokasi'
+    case 'liveLocationMessage':
+      return 'Live location'
+    case 'contactMessage':
+    case 'contactsArrayMessage':
+      return 'Contact'
+    case 'pollCreationMessage':
+    case 'pollCreationMessageV3':
+      return 'Poll'
+    case 'reactionMessage':
+      return 'Reaction'
+    case 'buttonsResponseMessage':
+    case 'listResponseMessage':
+    case 'templateButtonReplyMessage':
+      return 'Interactive reply'
+    case 'extendedTextMessage':
+      return 'Text / link'
+    default:
+      return message.contentType ? message.contentType.replace(/Message$/, '') : 'Mesej'
+  }
+}
+
+function renderDeletedMessageDetails(message: DeletedMessage) {
+  const details = message.details
+  if (details?.location) {
+    const { latitude, longitude, name, address } = details.location
+    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`
+    return (
+      <div className="mt-3 rounded-xl border border-sky-200/70 bg-sky-50/70 p-3 dark:border-sky-800/60 dark:bg-sky-950/20">
+        <div className="flex items-start gap-2">
+          <MapPin className="mt-0.5 size-4 shrink-0 text-sky-600 dark:text-sky-400" />
+          <div className="min-w-0 text-sm">
+            <p className="font-medium">{name || 'Lokasi dikongsi'}</p>
+            {address ? <p className="mt-0.5 text-xs text-muted-foreground">{address}</p> : null}
+            <p className="mt-1 text-[11px] text-muted-foreground">{latitude.toFixed(6)}, {longitude.toFixed(6)}</p>
+            <a href={mapsUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline">
+              <MapPin className="size-3.5" /> Buka dalam Maps
+            </a>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (details?.contact) {
+    return (
+      <div className="mt-3 flex items-center gap-3 rounded-xl border border-violet-200/70 bg-violet-50/70 p-3 dark:border-violet-800/60 dark:bg-violet-950/20">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-violet-500/15 text-violet-700 dark:text-violet-300">
+          <ContactRound className="size-4" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Contact</p>
+          <p className="truncate text-sm font-medium">{details.contact.displayName}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (details?.poll) {
+    return (
+      <div className="mt-3 rounded-xl border border-amber-200/70 bg-amber-50/70 p-3 dark:border-amber-800/60 dark:bg-amber-950/20">
+        <div className="flex items-start gap-2">
+          <ListChecks className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Poll</p>
+            <p className="text-sm font-medium">{details.poll.name}</p>
+            {details.poll.options.length ? (
+              <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                {details.poll.options.map((option, index) => <li key={`${option}-${index}`} className="rounded-md bg-background/70 px-2 py-1">{option}</li>)}
+              </ul>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (details?.reaction) {
+    return (
+      <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-pink-200/70 bg-pink-50/70 px-3 py-2 text-sm dark:border-pink-800/60 dark:bg-pink-950/20">
+        <Smile className="size-4 text-pink-600 dark:text-pink-400" />
+        <span>{details.reaction.text || 'Reaction'}</span>
+      </div>
+    )
+  }
+
+  return null
 }
 
 function renderDeletedMedia(message: DeletedMessage, url: string | null) {
