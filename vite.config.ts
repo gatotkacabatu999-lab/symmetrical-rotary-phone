@@ -54,6 +54,53 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, 'dist/public'),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+
+          if (
+            id.includes('react') ||
+            id.includes('@radix-ui') ||
+            id.includes('framer-motion') ||
+            id.includes('wouter') ||
+            id.includes('clsx') ||
+            id.includes('sonner') ||
+            id.includes('tailwind')
+          ) {
+            return 'ui-vendor';
+          }
+
+          if (
+            id.includes('leaflet') ||
+            id.includes('react-leaflet') ||
+            id.includes('@react-google-maps/api')
+          ) {
+            return 'map-vendor';
+          }
+
+          if (
+            id.includes('jspdf') ||
+            id.includes('html2canvas') ||
+            id.includes('qrcode') ||
+            id.includes('qr-scanner')
+          ) {
+            return 'media-vendor';
+          }
+
+          if (
+            id.includes('lightgallery') ||
+            id.includes('lg-') ||
+            id.includes('recharts') ||
+            id.includes('d3-')
+          ) {
+            return 'chart-vendor';
+          }
+
+          return 'vendor';
+        },
+      },
+    },
   },
   server: {
     port,

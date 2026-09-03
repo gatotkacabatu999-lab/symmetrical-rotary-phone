@@ -709,7 +709,7 @@ app.get('/bot/dashboard', ensureDashboardAuth, (req: any, res: any) => {
   res.status(200).send(html);
 });
 
-app.all('/api/*', async (req: any, res: any) => {
+app.all(/^\/api\//, async (req: any, res: any) => {
   try {
     await apiHandlerFn(req as never, res as never);
   } catch (error) {
@@ -722,15 +722,11 @@ app.all('/api/*', async (req: any, res: any) => {
 if (fs.existsSync(distDir)) {
   app.use(express.static(distDir));
 
-  app.get('*', (req: any, res: any) => {
-    if (req.path.startsWith('/api/')) {
-      return res.status(404).json({ success: false, error: `Unknown endpoint: ${req.path}` });
-    }
-
+  app.get(/^\/(?!api).*/, (req: any, res: any) => {
     return res.sendFile(path.join(distDir, 'index.html'));
   });
 } else {
-  app.get('*', (_req: any, res: any) => {
+  app.get(/^\/(?!api).*/, (_req: any, res: any) => {
     res.status(503).send('Frontend dist not found. Run npm run build first.');
   });
 }
